@@ -23,7 +23,8 @@
     "test": "vitest",
     "type-check": "tsc --noEmit",
     "type-check:watch": "tsc --noEmit --watch",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "playground": "vite"
   },
   "keywords": [
     "storage",
@@ -42,7 +43,7 @@
     "playwright": "^1.53.0",
     "rolldown": "^1.0.0-beta.15",
     "typescript": "^5.8.3",
+    "vite": "^6.3.5",
     "vitest": "^3.2.3"
-  },
-  "dependencies": {}
+  }
 }
