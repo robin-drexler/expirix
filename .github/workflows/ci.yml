@@ -30,11 +30,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
       - name: Run type check
         run: npm run type-check
 
       - name: Run tests
         run: npm test
+        env:
+          CI: true
 
       - name: Build project
         run: npm run build
