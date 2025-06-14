@@ -1,0 +1,50 @@
+{
+  "name": "expirix",
+  "version": "0.0.1",
+  "description": "A storage wrapper that adds expiration functionality to localStorage and sessionStorage",
+  "main": "dist/index.cjs",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.esm.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npm run clean && npm run build:rolldown && npm run build:types",
+    "build:rolldown": "rolldown -c rolldown.config.js",
+    "build:types": "tsc --emitDeclarationOnly && if [ -f dist/index.d.mts ]; then mv dist/index.d.mts dist/index.d.ts && mv dist/index.d.mts.map dist/index.d.ts.map && sed -i '' 's/index.d.mts.map/index.d.ts.map/g' dist/index.d.ts; fi",
+    "clean": "rm -rf dist",
+    "test": "jest",
+    "type-check": "tsc --noEmit",
+    "type-check:watch": "tsc --noEmit --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "storage",
+    "localStorage",
+    "sessionStorage",
+    "expiration",
+    "ttl"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@babel/preset-env": "^7.27.2",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^24.0.1",
+    "jest": "^30.0.0",
+    "jest-environment-jsdom": "^30.0.0",
+    "rolldown": "^1.0.0-beta.15",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "babel-jest": "^30.0.0"
+  }
+}

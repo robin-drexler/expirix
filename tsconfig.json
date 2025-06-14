@@ -1,0 +1,44 @@
+{
+  "compilerOptions": {
+    // Target modern JavaScript
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+
+    // Include DOM types for Storage interface
+    "lib": ["ES2020", "DOM"],
+
+    // Strict type checking options
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+
+    // Additional checks
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // Generate declaration files
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "dist",
+    "declarationDir": "dist",
+
+    // Allow JavaScript input files
+    "allowJs": true,
+    "checkJs": true,
+
+    // Base directory
+    "baseUrl": ".",
+
+    // Skip type checking of declaration files
+    "skipLibCheck": true,
+
+    // Force consistent casing in file names
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["index.mjs"],
+  "exclude": ["node_modules", "dist", "**/*.test.*"]
+}

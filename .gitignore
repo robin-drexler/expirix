@@ -1,0 +1,20 @@
+# Node modules
+node_modules/
+
+# Logs
+npm-debug.log*
+
+# Build output
+dist/
+build/
+es
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# IDE files
+.vscode/
+.idea/
+*.swp

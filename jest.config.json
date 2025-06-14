@@ -1,0 +1,6 @@
+{
+  "testEnvironment": "jsdom",
+  "transform": {
+    "^.+\\.mjs?$": "babel-jest"
+  }
+}
