@@ -3,7 +3,7 @@ import { defineConfig } from "rolldown";
 export default defineConfig([
   // ESM build
   {
-    input: "index.mjs",
+    input: "src/index.mjs",
     output: {
       file: "dist/index.esm.js",
       format: "esm",
@@ -11,7 +11,7 @@ export default defineConfig([
   },
   // CJS build
   {
-    input: "index.mjs",
+    input: "src/index.mjs",
     output: {
       file: "dist/index.cjs",
       format: "cjs",

@@ -39,6 +39,6 @@
     // Force consistent casing in file names
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["index.mjs"],
+  "include": ["src/index.mjs"],
   "exclude": ["node_modules", "dist", "**/*.test.*"]
 }
