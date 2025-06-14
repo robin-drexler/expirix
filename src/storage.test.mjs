@@ -1,4 +1,5 @@
 // Sat, 14 Jun 2025 00:00:00 GMT
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { wrapStorage } from "./index.mjs";
 
 const CURRENT_TIME = 1749859200000;
@@ -6,12 +7,12 @@ const CURRENT_TIME = 1749859200000;
 describe("Ephemeral Storage", () => {
   beforeEach(() => {
     window.localStorage.clear();
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date(CURRENT_TIME));
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(CURRENT_TIME));
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe("setItem", () => {
@@ -122,7 +123,7 @@ describe("Ephemeral Storage", () => {
       expect(resultAtSameTime).toBe("value");
 
       // Move time forward by 1ms to trigger expiration
-      jest.setSystemTime(new Date(CURRENT_TIME + 1));
+      vi.setSystemTime(new Date(CURRENT_TIME + 1));
 
       const result = storage.getItem("instant-expire");
       expect(result).toBe(null);
@@ -177,7 +178,7 @@ describe("Ephemeral Storage", () => {
       storage.setItem("test1", "value1");
 
       // Move time forward past expiration
-      jest.setSystemTime(new Date(CURRENT_TIME + 61000));
+      vi.setSystemTime(new Date(CURRENT_TIME + 61000));
 
       const result = storage.getItem("test1");
       expect(result).toBe(null);
@@ -190,7 +191,7 @@ describe("Ephemeral Storage", () => {
       storage.setItem("test1", "value1");
 
       // Move time forward past expiration
-      jest.setSystemTime(new Date(CURRENT_TIME + 61000));
+      vi.setSystemTime(new Date(CURRENT_TIME + 61000));
 
       storage.getItem("test1");
 
@@ -205,7 +206,7 @@ describe("Ephemeral Storage", () => {
       storage.setItem("test1", "value1");
 
       // Move time forward but not past expiration
-      jest.setSystemTime(new Date(CURRENT_TIME + 30000));
+      vi.setSystemTime(new Date(CURRENT_TIME + 30000));
 
       const result = storage.getItem("test1");
       expect(result).toBe("value1");
@@ -218,13 +219,13 @@ describe("Ephemeral Storage", () => {
       storage.setItem("test1", "value1");
 
       // Move time forward to exactly expiration time (should still be valid)
-      jest.setSystemTime(new Date(CURRENT_TIME + 60000));
+      vi.setSystemTime(new Date(CURRENT_TIME + 60000));
 
       const result = storage.getItem("test1");
       expect(result).toBe("value1");
 
       // Move time forward past expiration time (should be expired)
-      jest.setSystemTime(new Date(CURRENT_TIME + 60001));
+      vi.setSystemTime(new Date(CURRENT_TIME + 60001));
 
       const expiredResult = storage.getItem("test1");
       expect(expiredResult).toBe(null);
