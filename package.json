@@ -4,7 +4,7 @@
   "description": "A storage wrapper that adds expiration functionality to localStorage and sessionStorage",
   "main": "dist/index.cjs",
   "module": "dist/index.esm.js",
-  "types": "dist/index.d.ts",
+  "types": "dist/index.d.mts",
   "exports": {
     ".": {
       "import": "./dist/index.esm.js",
@@ -18,7 +18,7 @@
   "scripts": {
     "build": "npm run clean && npm run build:rolldown && npm run build:types",
     "build:rolldown": "rolldown -c rolldown.config.js",
-    "build:types": "tsc --emitDeclarationOnly && if [ -f dist/index.d.mts ]; then mv dist/index.d.mts dist/index.d.ts && mv dist/index.d.mts.map dist/index.d.ts.map && sed -i '' 's/index.d.mts.map/index.d.ts.map/g' dist/index.d.ts; fi",
+    "build:types": "tsc --emitDeclarationOnly --outDir dist",
     "clean": "rm -rf dist",
     "test": "jest",
     "type-check": "tsc --noEmit",
