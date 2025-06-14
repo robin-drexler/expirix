@@ -39,6 +39,54 @@ Wraps a Storage object to add expiration functionality.
 
 **Returns:** A Storage-compatible object with expiration support
 
+### `cleanupFactory(originalStorage, options?)`
+
+Creates a cleanup function to wrap existing values and remove expired ones.
+
+**Parameters:**
+
+- `originalStorage` (Storage): The storage object (localStorage or sessionStorage)
+- `options` (object, optional):
+  - `expiresInSeconds` (number, optional): Time in seconds after which stored items expire
+  - `runWhenBrowserIsIdle` (boolean, optional): Whether to run cleanup when browser is idle (default: false)
+
+**Returns:** An object with a `runCleanup()` method
+
+**Example:**
+
+```javascript
+import { cleanupFactory } from "expirix";
+
+// Create cleanup that runs when browser is idle
+const cleanup = cleanupFactory(localStorage, {
+  expiresInSeconds: 3600, // 1 hour
+  runWhenBrowserIsIdle: true,
+});
+
+// Run cleanup (will use requestIdleCallback if available, setTimeout as fallback)
+cleanup.runCleanup();
+```
+
+## Browser Idle Cleanup
+
+The library includes support for running cleanup operations when the browser is idle, using the `requestIdleCallback` API when available, with a simple polyfill fallback for older browsers.
+
+```javascript
+// Cleanup will run when browser is idle
+const idleCleanup = cleanupFactory(localStorage, {
+  expiresInSeconds: 3600,
+  runWhenBrowserIsIdle: true,
+});
+
+idleCleanup.runCleanup(); // Schedules cleanup for when browser is idle
+```
+
+**requestIdleCallback Polyfill:**
+
+- Uses native `requestIdleCallback` when available
+- Falls back to `setTimeout` with 1ms delay in older browsers
+- Provides deadline object with `didTimeout` and `timeRemaining()` methods
+
 ## Features
 
 - ✅ **Drop-in replacement** for localStorage/sessionStorage
