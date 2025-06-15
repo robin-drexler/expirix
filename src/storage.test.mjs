@@ -153,6 +153,139 @@ describe("Ephemeral Storage", () => {
       const parsed = JSON.parse(rawValue ?? "");
       expect(parsed.ed).toBe(CURRENT_TIME + 999999999 * 1000);
     });
+
+    it("handles non-string values the same as native localStorage", () => {
+      const storage = wrapStorage(window.localStorage);
+      const testKey = "test-non-string";
+
+      // Test null
+      const nullValue = null;
+      localStorage.setItem(testKey, nullValue);
+      const nativeNullResult = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+
+      storage.setItem(testKey, nullValue);
+      const wrappedNullResult = storage.getItem(testKey);
+      storage.removeItem(testKey);
+
+      expect(wrappedNullResult).toBe(nativeNullResult);
+      expect(wrappedNullResult).toBe("null");
+
+      // Test undefined
+      const undefinedValue = undefined;
+      localStorage.setItem(testKey, undefinedValue);
+      const nativeUndefinedResult = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+
+      storage.setItem(testKey, undefinedValue);
+      const wrappedUndefinedResult = storage.getItem(testKey);
+      storage.removeItem(testKey);
+
+      expect(wrappedUndefinedResult).toBe(nativeUndefinedResult);
+      expect(wrappedUndefinedResult).toBe("undefined");
+
+      // Test number
+      const numberValue = 42;
+      localStorage.setItem(testKey, numberValue);
+      const nativeNumberResult = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+
+      storage.setItem(testKey, numberValue);
+      const wrappedNumberResult = storage.getItem(testKey);
+      storage.removeItem(testKey);
+
+      expect(wrappedNumberResult).toBe(nativeNumberResult);
+      expect(wrappedNumberResult).toBe("42");
+
+      // Test boolean
+      const booleanValue = true;
+      localStorage.setItem(testKey, booleanValue);
+      const nativeBooleanResult = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+
+      storage.setItem(testKey, booleanValue);
+      const wrappedBooleanResult = storage.getItem(testKey);
+      storage.removeItem(testKey);
+
+      expect(wrappedBooleanResult).toBe(nativeBooleanResult);
+      expect(wrappedBooleanResult).toBe("true");
+
+      // Test object (should become "[object Object]")
+      const objectValue = { name: "test" };
+      localStorage.setItem(testKey, objectValue);
+      const nativeObjectResult = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+
+      storage.setItem(testKey, objectValue);
+      const wrappedObjectResult = storage.getItem(testKey);
+      storage.removeItem(testKey);
+
+      expect(wrappedObjectResult).toBe(nativeObjectResult);
+      expect(wrappedObjectResult).toBe("[object Object]");
+
+      // Test array (should become comma-separated values)
+      const arrayValue = [1, 2, 3];
+      localStorage.setItem(testKey, arrayValue);
+      const nativeArrayResult = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+
+      storage.setItem(testKey, arrayValue);
+      const wrappedArrayResult = storage.getItem(testKey);
+      storage.removeItem(testKey);
+
+      expect(wrappedArrayResult).toBe(nativeArrayResult);
+      expect(wrappedArrayResult).toBe("1,2,3");
+
+      // Test function (should become function string)
+      const functionValue = function () {
+        return "test";
+      };
+      localStorage.setItem(testKey, functionValue);
+      const nativeFunctionResult = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+
+      storage.setItem(testKey, functionValue);
+      const wrappedFunctionResult = storage.getItem(testKey);
+      storage.removeItem(testKey);
+
+      expect(wrappedFunctionResult).toBe(nativeFunctionResult);
+      expect(wrappedFunctionResult).toContain("function");
+    });
+
+    it("handles missing value parameter the same as native localStorage", () => {
+      const storage = wrapStorage(window.localStorage);
+      const testKey = "test-missing-value";
+
+      // Test what happens when setItem is called with no second argument
+      // Native localStorage throws an error when only one argument is provided
+      expect(() => {
+        localStorage.setItem(testKey);
+      }).toThrow(
+        "Failed to execute 'setItem' on 'Storage': 2 arguments required, but only 1 present."
+      );
+
+      // Our wrapped storage should also throw an error or behave consistently
+      expect(() => {
+        storage.setItem(testKey);
+      }).toThrow();
+    });
+
+    it("handles no arguments the same as native localStorage", () => {
+      const storage = wrapStorage(window.localStorage);
+
+      // Test what happens when setItem is called with no arguments at all
+      expect(() => {
+        localStorage.setItem();
+      }).toThrow(
+        "Failed to execute 'setItem' on 'Storage': 2 arguments required, but only 0 present."
+      );
+
+      expect(() => {
+        storage.setItem();
+      }).toThrow(
+        "Failed to execute 'setItem' on 'Storage': 2 arguments required, but only 0 present."
+      );
+    });
   });
 
   describe("getItem", () => {

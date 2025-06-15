@@ -69,10 +69,20 @@ export function wrapStorage(originalStorage, { expiresInSeconds } = {}) {
 
     /**
      * @param {string} key
-     * @param {string} value
+     * @param {any} value
      */
     setItem(key, value) {
-      originalStorage.setItem(key, JSON.stringify(createWrappedItem(value)));
+      if (arguments.length < 2) {
+        throw new TypeError(
+          `Failed to execute 'setItem' on 'Storage': 2 arguments required, but only ${arguments.length} present.`
+        );
+      }
+
+      const stringValue = String(value);
+      originalStorage.setItem(
+        key,
+        JSON.stringify(createWrappedItem(stringValue))
+      );
     },
 
     /**
