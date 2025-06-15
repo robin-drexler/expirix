@@ -1,42 +1,41 @@
 /**
- * @param {Storage} originalStorage - The storage object (localStorage or sessionStorage)
- * @param {{ expiresInSeconds?: number }} [options={}] - Configuration options
+ * @param {Storage} originalStorage
+ * @param {{ expiresInSeconds?: number }} options
  * @returns {Storage}
  */
 export function wrapStorage(originalStorage, { expiresInSeconds } = {}) {
-  const VERSION = "1";
+  const EXPIRY_PREFIX = "__exp_";
+  const EXPIRY_VERSION = "v1";
+  const pendingExpiries = new Map();
 
   /**
-   * @param {any} parsed
-   * @returns {boolean}
+   * @param {string} key
    */
-  function isWrappedValue(parsed) {
-    return typeof parsed === "object" && parsed !== null && "__vr" in parsed;
+  function getExpiryKey(key) {
+    return EXPIRY_PREFIX + key;
   }
 
   /**
-   * @param {string} value
-   * @returns {object}
+   * @param {() => void} task
    */
-  function createWrappedItem(value) {
-    /** @type {{ v: string, __vr: string, ed?: number }} */
-    const item = { v: value, __vr: VERSION };
-    if (expiresInSeconds !== undefined) {
-      item.ed = Date.now() + expiresInSeconds * 1000;
+  function scheduleTask(task) {
+    if (typeof requestIdleCallback !== "undefined") {
+      requestIdleCallback(task);
+    } else {
+      task();
     }
-    return item;
   }
 
   /**
    * @param {string} key
-   * @param {string} value
-   * @returns {string}
    */
-  function autoWrapIfNeeded(key, value) {
-    if (expiresInSeconds !== undefined) {
-      originalStorage.setItem(key, JSON.stringify(createWrappedItem(value)));
-    }
-    return value;
+  function cleanupOrphanedExpiry(key) {
+    scheduleTask(() => {
+      const expiryKey = getExpiryKey(key);
+      if (originalStorage.getItem(expiryKey) && !originalStorage.getItem(key)) {
+        originalStorage.removeItem(expiryKey);
+      }
+    });
   }
 
   return {
@@ -45,26 +44,60 @@ export function wrapStorage(originalStorage, { expiresInSeconds } = {}) {
      * @returns {string | null}
      */
     getItem(key) {
-      const value = originalStorage.getItem(key);
-      if (!value) return value;
-
-      try {
-        const parsed = JSON.parse(value);
-
-        if (isWrappedValue(parsed)) {
-          if (parsed.ed && parsed.ed < Date.now()) {
-            originalStorage.removeItem(key);
-            return null;
-          }
-          return parsed.v;
-        }
-
-        // Auto-wrap existing non-wrapped values
-        return autoWrapIfNeeded(key, value);
-      } catch (e) {
-        // Handle non-JSON values
-        return autoWrapIfNeeded(key, value);
+      if (key.startsWith(EXPIRY_PREFIX)) {
+        return originalStorage.getItem(key);
       }
+
+      const value = originalStorage.getItem(key);
+      if (value === null) {
+        cleanupOrphanedExpiry(key);
+        return null;
+      }
+
+      const expiryKey = getExpiryKey(key);
+      let expiryData =
+        originalStorage.getItem(expiryKey) ||
+        (pendingExpiries.has(key)
+          ? JSON.stringify(pendingExpiries.get(key))
+          : null);
+
+      if (!expiryData && expiresInSeconds !== undefined) {
+        const newExpiry = {
+          e: Date.now() + expiresInSeconds * 1000,
+          v: EXPIRY_VERSION,
+        };
+        pendingExpiries.set(key, newExpiry);
+        scheduleTask(() => {
+          if (pendingExpiries.has(key)) {
+            originalStorage.setItem(
+              expiryKey,
+              JSON.stringify(pendingExpiries.get(key))
+            );
+            pendingExpiries.delete(key);
+          }
+        });
+        return value;
+      }
+
+      if (!expiryData) return value;
+
+      let expiryTime;
+      try {
+        expiryTime = JSON.parse(expiryData).e;
+      } catch (e) {
+        originalStorage.removeItem(expiryKey);
+        pendingExpiries.delete(key);
+        return value;
+      }
+
+      if (Date.now() > expiryTime) {
+        originalStorage.removeItem(key);
+        originalStorage.removeItem(expiryKey);
+        pendingExpiries.delete(key);
+        return null;
+      }
+
+      return value;
     },
 
     /**
@@ -78,11 +111,25 @@ export function wrapStorage(originalStorage, { expiresInSeconds } = {}) {
         );
       }
 
-      const stringValue = String(value);
-      originalStorage.setItem(
-        key,
-        JSON.stringify(createWrappedItem(stringValue))
-      );
+      originalStorage.setItem(key, String(value));
+
+      if (expiresInSeconds !== undefined) {
+        const expiryData = {
+          e: Date.now() + expiresInSeconds * 1000,
+          v: EXPIRY_VERSION,
+        };
+        pendingExpiries.set(key, expiryData);
+
+        scheduleTask(() => {
+          if (pendingExpiries.has(key)) {
+            originalStorage.setItem(
+              getExpiryKey(key),
+              JSON.stringify(pendingExpiries.get(key))
+            );
+            pendingExpiries.delete(key);
+          }
+        });
+      }
     },
 
     /**
@@ -90,6 +137,8 @@ export function wrapStorage(originalStorage, { expiresInSeconds } = {}) {
      */
     removeItem(key) {
       originalStorage.removeItem(key);
+      originalStorage.removeItem(getExpiryKey(key));
+      pendingExpiries.delete(key);
     },
 
     /**
@@ -102,6 +151,48 @@ export function wrapStorage(originalStorage, { expiresInSeconds } = {}) {
 
     clear() {
       originalStorage.clear();
+      pendingExpiries.clear();
+    },
+
+    cleanup() {
+      const keysToRemove = [];
+
+      for (let i = 0; i < originalStorage.length; i++) {
+        const key = originalStorage.key(i);
+
+        if (key?.startsWith(EXPIRY_PREFIX)) {
+          const dataKey = key.slice(EXPIRY_PREFIX.length);
+          const expiryData = originalStorage.getItem(key);
+
+          let expiryTime = 0;
+          if (expiryData) {
+            try {
+              expiryTime = JSON.parse(expiryData).e;
+            } catch (e) {
+              expiryTime = 0;
+            }
+          }
+
+          if (
+            !originalStorage.getItem(dataKey) ||
+            (expiryTime && Date.now() > expiryTime)
+          ) {
+            keysToRemove.push(key);
+            if (originalStorage.getItem(dataKey)) {
+              keysToRemove.push(dataKey);
+            }
+          }
+        }
+      }
+
+      keysToRemove.forEach((key) => {
+        originalStorage.removeItem(key);
+        if (key.startsWith(EXPIRY_PREFIX)) {
+          pendingExpiries.delete(key.slice(EXPIRY_PREFIX.length));
+        } else {
+          pendingExpiries.delete(key);
+        }
+      });
     },
 
     get length() {
