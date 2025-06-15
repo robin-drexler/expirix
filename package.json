@@ -20,7 +20,7 @@
     "build:rolldown": "rolldown -c rolldown.config.js",
     "build:types": "tsc --emitDeclarationOnly --outDir dist",
     "clean": "rm -rf dist",
-    "test": "vitest",
+    "test": "vitest run",
     "type-check": "tsc --noEmit",
     "type-check:watch": "tsc --noEmit --watch",
     "prepublishOnly": "npm run build",
