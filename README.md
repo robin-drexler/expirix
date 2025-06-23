@@ -10,7 +10,9 @@ A storage wrapper that adds expiration functionality to `localStorage` or any ot
 npm install expiring-storage
 ```
 
-## Usage
+## Examples
+
+### Basic Usage
 
 ```javascript
 import { wrapStorage } from "expirix";
@@ -23,6 +25,31 @@ storage.setItem("key", "value");
 
 // Get the value (returns null if expired)
 const value = storage.getItem("key");
+```
+
+### Creating a reusable storage module
+
+```javascript
+// app-storage.js
+import { wrapStorage } from "expirix";
+
+const wrappedLocalStorage = wrapStorage(localStorage, {
+  expiresInSeconds: 3600,
+});
+
+export default wrappedLocalStorage;
+```
+
+```javascript
+// Using in your app
+import storage from "./app-storage.js";
+
+// Store user preferences that expire in 1 hour
+storage.setItem("theme", "dark");
+storage.setItem("language", "en");
+
+// Later...
+const theme = storage.getItem("theme"); // null if expired
 ```
 
 ## API
@@ -41,7 +68,8 @@ Wraps a Storage object to add expiration functionality.
 
 ### `cleanupFactory(originalStorage, options?)`
 
-Creates a cleanup function to wrap existing values and remove expired ones.
+Creates a cleanup function to remove expired values and optionally wrap unwrapped values so that they can be cleaned up later on as well.
+Useful to cleanup keys that might not be requested by the app anymore.
 
 **Parameters:**
 
@@ -50,6 +78,7 @@ Creates a cleanup function to wrap existing values and remove expired ones.
   - `expiresInSeconds` (number, optional): Time in seconds after which stored items expire
   - `runWhenBrowserIsIdle` (boolean, optional): Whether to run cleanup when browser is idle (default: true)
   - `wrapUnwrappedItems` (boolean, optional): Whether to wrap non-wrapped items with expiration metadata (default: false)
+    If turned on, this will wrap existing values in a JSON structure. Only use it if you are sure that whatever code reads these values can handle this.
 
 **Returns:** An object with a `runCleanup()` method
 
@@ -73,7 +102,7 @@ const immediateCleanup = cleanupFactory(localStorage, {
 });
 ```
 
-## Wrapping Behavior Control
+#### Wrapping Behavior Control
 
 By default, cleanup operations only remove expired items but do not modify existing unwrapped values. You can control whether cleanup should wrap existing unwrapped items with the `wrapUnwrappedItems` option.
 
@@ -92,7 +121,7 @@ const cleanupAndWrap = cleanupFactory(localStorage, {
 
 This gives you fine-grained control over when existing data gets wrapped with expiration metadata.
 
-## Browser Idle Cleanup
+#### Browser Idle Cleanup
 
 By default, the library runs cleanup operations when the browser is idle, using the `requestIdleCallback` API when available, with a simple polyfill fallback for older browsers.
 
@@ -115,7 +144,6 @@ const immediateCleanup = cleanupFactory(localStorage, {
 
 - Uses native `requestIdleCallback` when available
 - Falls back to `setTimeout` with 1ms delay in older browsers
-- Provides deadline object with `didTimeout` and `timeRemaining()` methods
 
 ## Features
 
