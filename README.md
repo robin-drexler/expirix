@@ -7,7 +7,7 @@ A storage wrapper that adds expiration functionality to `localStorage` or any ot
 ## Installation
 
 ```bash
-npm install expiring-storage
+npm install expirix
 ```
 
 ## Examples
