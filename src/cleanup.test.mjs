@@ -15,12 +15,13 @@ describe("Cleanup Factory", () => {
   });
 
   describe("runWhenBrowserIsIdle", () => {
-    it("runs cleanup immediately when runWhenBrowserIsIdle is false", () => {
+    it("runs cleanup immediately when runWhenBrowserIsIdle is explicitly set to false", () => {
       window.localStorage.setItem("key1", "value1");
 
       const cleanup = cleanupFactory(window.localStorage, {
         expiresInSeconds: 60,
         runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: true,
       });
       cleanup.runCleanup();
 
@@ -48,6 +49,7 @@ describe("Cleanup Factory", () => {
       const cleanup = cleanupFactory(window.localStorage, {
         expiresInSeconds: 60,
         runWhenBrowserIsIdle: true,
+        wrapUnwrappedItems: true,
       });
       cleanup.runCleanup();
 
@@ -92,6 +94,7 @@ describe("Cleanup Factory", () => {
       const cleanup = cleanupFactory(window.localStorage, {
         expiresInSeconds: 60,
         runWhenBrowserIsIdle: true,
+        wrapUnwrappedItems: true,
       });
       cleanup.runCleanup();
 
@@ -184,6 +187,46 @@ describe("Cleanup Factory", () => {
         window.requestIdleCallback = originalRequestIdleCallback;
       }
     });
+
+    it("uses idle behavior by default when no runWhenBrowserIsIdle is specified", () => {
+      // Mock requestIdleCallback to verify it gets called by default
+      const mockRequestIdleCallback = vi.fn((callback) => {
+        callback({ didTimeout: false, timeRemaining: () => 50 });
+        return 1;
+      });
+      const originalRequestIdleCallback = window.requestIdleCallback;
+      window.requestIdleCallback = mockRequestIdleCallback;
+
+      window.localStorage.setItem("key1", "value1");
+
+      // Create cleanup without specifying runWhenBrowserIsIdle (should default to true)
+      const cleanup = cleanupFactory(window.localStorage, {
+        expiresInSeconds: 60,
+        wrapUnwrappedItems: true,
+      });
+      cleanup.runCleanup();
+
+      // Check that requestIdleCallback was called (proving default is true)
+      expect(mockRequestIdleCallback).toHaveBeenCalledTimes(1);
+      expect(mockRequestIdleCallback).toHaveBeenCalledWith(
+        expect.any(Function)
+      );
+
+      // Check that cleanup eventually ran
+      const wrappedValue = JSON.parse(window.localStorage.getItem("key1"));
+      expect(wrappedValue).toEqual({
+        v: "value1",
+        __vr: "1",
+        ed: CURRENT_TIME + 60000,
+      });
+
+      // Clean up
+      if (originalRequestIdleCallback) {
+        window.requestIdleCallback = originalRequestIdleCallback;
+      } else {
+        delete window.requestIdleCallback;
+      }
+    });
   });
 
   describe("runCleanup", () => {
@@ -194,6 +237,8 @@ describe("Cleanup Factory", () => {
 
       const cleanup = cleanupFactory(window.localStorage, {
         expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: true,
       });
       cleanup.runCleanup();
 
@@ -220,6 +265,8 @@ describe("Cleanup Factory", () => {
 
       const cleanup = cleanupFactory(window.localStorage, {
         expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: true,
       });
       cleanup.runCleanup();
 
@@ -235,7 +282,10 @@ describe("Cleanup Factory", () => {
     it("wraps plain values without expiry when expiresInSeconds is not provided", () => {
       window.localStorage.setItem("key1", "value1");
 
-      const cleanup = cleanupFactory(window.localStorage);
+      const cleanup = cleanupFactory(window.localStorage, {
+        runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: true,
+      });
       cleanup.runCleanup();
 
       // Check that value is wrapped but without expiry
@@ -258,6 +308,7 @@ describe("Cleanup Factory", () => {
 
       const cleanup = cleanupFactory(window.localStorage, {
         expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
       });
       cleanup.runCleanup();
 
@@ -280,6 +331,8 @@ describe("Cleanup Factory", () => {
 
       const cleanup = cleanupFactory(window.localStorage, {
         expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: true,
       });
       cleanup.runCleanup();
 
@@ -323,6 +376,8 @@ describe("Cleanup Factory", () => {
 
       const cleanup = cleanupFactory(window.localStorage, {
         expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: true,
       });
       cleanup.runCleanup();
 
@@ -355,6 +410,7 @@ describe("Cleanup Factory", () => {
     it("handles empty storage gracefully", () => {
       const cleanup = cleanupFactory(window.localStorage, {
         expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
       });
 
       expect(() => cleanup.runCleanup()).not.toThrow();
@@ -368,6 +424,8 @@ describe("Cleanup Factory", () => {
 
       const cleanup = cleanupFactory(window.localStorage, {
         expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: true,
       });
       cleanup.runCleanup();
 
@@ -384,6 +442,173 @@ describe("Cleanup Factory", () => {
       // Valid value should also be wrapped
       const validResult = JSON.parse(window.localStorage.getItem("valid"));
       expect(validResult.v).toBe("valid-value");
+    });
+  });
+
+  describe("wrapUnwrappedItems", () => {
+    it("does not wrap unwrapped items by default (wrapUnwrappedItems: false)", () => {
+      // Set up plain values and already wrapped values
+      window.localStorage.setItem("plain1", "plain-value-1");
+      window.localStorage.setItem("plain2", "plain-value-2");
+
+      const wrappedValue = {
+        v: "wrapped-value",
+        __vr: "1",
+        ed: CURRENT_TIME + 30000,
+      };
+      window.localStorage.setItem("wrapped", JSON.stringify(wrappedValue));
+
+      const cleanup = cleanupFactory(window.localStorage, {
+        expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
+      });
+      cleanup.runCleanup();
+
+      // Plain values should remain unwrapped
+      expect(window.localStorage.getItem("plain1")).toBe("plain-value-1");
+      expect(window.localStorage.getItem("plain2")).toBe("plain-value-2");
+
+      // Already wrapped value should remain unchanged
+      const resultWrapped = JSON.parse(window.localStorage.getItem("wrapped"));
+      expect(resultWrapped).toEqual(wrappedValue);
+    });
+
+    it("wraps unwrapped items when wrapUnwrappedItems is true", () => {
+      // Set up plain values
+      window.localStorage.setItem("plain1", "plain-value-1");
+      window.localStorage.setItem("plain2", JSON.stringify({ data: "test" }));
+
+      const cleanup = cleanupFactory(window.localStorage, {
+        expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: true,
+      });
+      cleanup.runCleanup();
+
+      // Plain values should now be wrapped
+      const wrappedValue1 = JSON.parse(window.localStorage.getItem("plain1"));
+      expect(wrappedValue1).toEqual({
+        v: "plain-value-1",
+        __vr: "1",
+        ed: CURRENT_TIME + 60000,
+      });
+
+      const wrappedValue2 = JSON.parse(window.localStorage.getItem("plain2"));
+      expect(wrappedValue2).toEqual({
+        v: JSON.stringify({ data: "test" }),
+        __vr: "1",
+        ed: CURRENT_TIME + 60000,
+      });
+    });
+
+    it("removes expired wrapped items regardless of wrapUnwrappedItems setting", () => {
+      // Set up expired wrapped value
+      const expiredValue = {
+        v: "expired-value",
+        __vr: "1",
+        ed: CURRENT_TIME - 1000, // expired 1 second ago
+      };
+      window.localStorage.setItem("expired", JSON.stringify(expiredValue));
+
+      // Set up plain value
+      window.localStorage.setItem("plain", "plain-value");
+
+      // Test with wrapUnwrappedItems: false
+      const cleanup1 = cleanupFactory(window.localStorage, {
+        expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: false,
+      });
+      cleanup1.runCleanup();
+
+      // Expired value should be removed
+      expect(window.localStorage.getItem("expired")).toBeNull();
+
+      // Plain value should remain unwrapped
+      expect(window.localStorage.getItem("plain")).toBe("plain-value");
+
+      // Reset and test with wrapUnwrappedItems: true
+      window.localStorage.setItem("expired2", JSON.stringify(expiredValue));
+      window.localStorage.setItem("plain2", "plain-value-2");
+
+      const cleanup2 = cleanupFactory(window.localStorage, {
+        expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: true,
+      });
+      cleanup2.runCleanup();
+
+      // Expired value should be removed
+      expect(window.localStorage.getItem("expired2")).toBeNull();
+
+      // Plain value should be wrapped
+      const wrappedResult = JSON.parse(window.localStorage.getItem("plain2"));
+      expect(wrappedResult).toEqual({
+        v: "plain-value-2",
+        __vr: "1",
+        ed: CURRENT_TIME + 60000,
+      });
+    });
+
+    it("handles non-JSON values correctly with wrapUnwrappedItems option", () => {
+      // Set up corrupted JSON and plain string
+      window.localStorage.setItem("corrupted", "{invalid json}");
+      window.localStorage.setItem("plain", "simple-string");
+
+      // Test with wrapUnwrappedItems: false
+      const cleanup1 = cleanupFactory(window.localStorage, {
+        expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: false,
+      });
+      cleanup1.runCleanup();
+
+      // Values should remain unwrapped
+      expect(window.localStorage.getItem("corrupted")).toBe("{invalid json}");
+      expect(window.localStorage.getItem("plain")).toBe("simple-string");
+
+      // Test with wrapUnwrappedItems: true
+      const cleanup2 = cleanupFactory(window.localStorage, {
+        expiresInSeconds: 60,
+        runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: true,
+      });
+      cleanup2.runCleanup();
+
+      // Values should now be wrapped
+      const wrappedCorrupted = JSON.parse(
+        window.localStorage.getItem("corrupted")
+      );
+      expect(wrappedCorrupted).toEqual({
+        v: "{invalid json}",
+        __vr: "1",
+        ed: CURRENT_TIME + 60000,
+      });
+
+      const wrappedPlain = JSON.parse(window.localStorage.getItem("plain"));
+      expect(wrappedPlain).toEqual({
+        v: "simple-string",
+        __vr: "1",
+        ed: CURRENT_TIME + 60000,
+      });
+    });
+
+    it("works without expiresInSeconds when wrapUnwrappedItems is true", () => {
+      window.localStorage.setItem("plain", "plain-value");
+
+      const cleanup = cleanupFactory(window.localStorage, {
+        runWhenBrowserIsIdle: false,
+        wrapUnwrappedItems: true,
+      });
+      cleanup.runCleanup();
+
+      // Value should be wrapped without expiry
+      const wrappedValue = JSON.parse(window.localStorage.getItem("plain"));
+      expect(wrappedValue).toEqual({
+        v: "plain-value",
+        __vr: "1",
+      });
+      expect(wrappedValue.ed).toBeUndefined();
     });
   });
 });

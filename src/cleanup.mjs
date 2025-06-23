@@ -35,31 +35,29 @@ function getRequestIdleCallback() {
 
 /**
  * @param {Storage} originalStorage - The storage object (localStorage or sessionStorage)
- * @param {{ expiresInSeconds?: number, runWhenBrowserIsIdle?: boolean }} [options={}] - Configuration options
+ * @param {{ expiresInSeconds?: number, runWhenBrowserIsIdle?: boolean, wrapUnwrappedItems?: boolean }} [options={}] - Configuration options
  * @returns {{ runCleanup: () => void }}
  */
 export function cleanupFactory(
   originalStorage,
-  { expiresInSeconds, runWhenBrowserIsIdle = false } = {}
+  {
+    expiresInSeconds,
+    runWhenBrowserIsIdle = true,
+    wrapUnwrappedItems = false,
+  } = {}
 ) {
   /**
    * @returns {void}
    */
   function runCleanup() {
     const actualCleanup = () => {
-      // Collect all keys first to avoid issues with storage mutation during iteration
-      const keys = [];
-      for (let i = 0; i < originalStorage.length; i++) {
+      // Iterate backwards through storage to handle removals safely in a single pass
+      for (let i = originalStorage.length - 1; i >= 0; i--) {
         const key = originalStorage.key(i);
-        if (key !== null) {
-          keys.push(key);
-        }
-      }
+        if (key === null) continue;
 
-      // Process each key
-      keys.forEach((key) => {
         const value = originalStorage.getItem(key);
-        if (!value) return;
+        if (!value) continue;
 
         try {
           const parsed = JSON.parse(value);
@@ -70,21 +68,24 @@ export function cleanupFactory(
               originalStorage.removeItem(key);
             }
             // If not expired, leave it as is
-          } else {
-            // Not a wrapped value yet, wrap it
+          } else if (wrapUnwrappedItems) {
+            // Not a wrapped value yet, wrap it only if wrapUnwrappedItems is true
             originalStorage.setItem(
               key,
               JSON.stringify(createWrappedItem(value, expiresInSeconds))
             );
           }
+          // If wrapUnwrappedItems is false, leave unwrapped items as-is
         } catch (e) {
-          // Handle non-JSON values - treat as plain string and wrap
-          originalStorage.setItem(
-            key,
-            JSON.stringify(createWrappedItem(value, expiresInSeconds))
-          );
+          // Handle non-JSON values - treat as plain string and wrap only if wrapUnwrappedItems is true
+          if (wrapUnwrappedItems) {
+            originalStorage.setItem(
+              key,
+              JSON.stringify(createWrappedItem(value, expiresInSeconds))
+            );
+          }
         }
-      });
+      }
     };
 
     if (runWhenBrowserIsIdle) {
