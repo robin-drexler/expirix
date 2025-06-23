@@ -109,3 +109,6 @@ export function wrapStorage(originalStorage, { expiresInSeconds } = {}) {
     },
   };
 }
+
+// Re-export the cleanup factory for convenience
+export { cleanupFactory } from "./cleanup.mjs";
