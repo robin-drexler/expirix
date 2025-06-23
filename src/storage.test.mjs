@@ -5,14 +5,24 @@ import { wrapStorage } from "./index.mjs";
 const CURRENT_TIME = 1749859200000;
 
 describe("Ephemeral Storage", () => {
+  let originalRequestIdleCallback;
+
   beforeEach(() => {
     window.localStorage.clear();
     vi.useFakeTimers();
     vi.setSystemTime(new Date(CURRENT_TIME));
+
+    // Mock requestIdleCallback to execute immediately for all tests
+    originalRequestIdleCallback = globalThis.requestIdleCallback;
+    globalThis.requestIdleCallback = vi.fn((callback) => {
+      callback(); // Execute immediately
+    });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    // Restore original requestIdleCallback
+    globalThis.requestIdleCallback = originalRequestIdleCallback;
   });
 
   describe("setItem", () => {
@@ -20,11 +30,12 @@ describe("Ephemeral Storage", () => {
       const storage = wrapStorage(window.localStorage);
       storage.setItem("test1", "value1");
 
+      // Value should be stored directly
       const rawValue = window.localStorage.getItem("test1");
-      const parsed = JSON.parse(rawValue ?? "");
-      expect(parsed.v).toBe("value1");
-      expect(parsed.__vr).toBe("1");
-      expect(parsed.ed).toBeUndefined();
+      expect(rawValue).toBe("value1");
+
+      // No expiry key should exist
+      expect(window.localStorage.getItem("__exp_test1")).toBeNull();
     });
 
     it("adds expiry when storing new items with expiresInSeconds", () => {
@@ -33,11 +44,16 @@ describe("Ephemeral Storage", () => {
       });
       storage.setItem("test1", "value1");
 
-      const result = window.localStorage.getItem("test1") ?? "";
-      expect(JSON.parse(result)).toMatchObject({
-        v: "value1",
-        __vr: "1",
-        ed: CURRENT_TIME + 60000,
+      // Value should be stored directly
+      const rawValue = window.localStorage.getItem("test1");
+      expect(rawValue).toBe("value1");
+
+      // Expiry should be stored separately as JSON
+      const expiryValue = window.localStorage.getItem("__exp_test1");
+      const expiryData = JSON.parse(expiryValue);
+      expect(expiryData).toMatchObject({
+        e: CURRENT_TIME + 60000,
+        v: "v1",
       });
     });
 
@@ -115,8 +131,11 @@ describe("Ephemeral Storage", () => {
 
       // Check what was stored
       const storedValue = window.localStorage.getItem("instant-expire");
-      const parsed = JSON.parse(storedValue ?? "");
-      expect(parsed.ed).toBe(CURRENT_TIME); // Should expire at current time
+      expect(storedValue).toBe("value");
+
+      const expiryValue = window.localStorage.getItem("__exp_instant-expire");
+      const expiryData = JSON.parse(expiryValue);
+      expect(expiryData.e).toBe(CURRENT_TIME); // Should expire at current time
 
       // At exactly the same time, it should still be valid
       const resultAtSameTime = storage.getItem("instant-expire");
@@ -149,9 +168,9 @@ describe("Ephemeral Storage", () => {
       const result = storage.getItem("far-future");
       expect(result).toBe("value");
 
-      const rawValue = window.localStorage.getItem("far-future");
-      const parsed = JSON.parse(rawValue ?? "");
-      expect(parsed.ed).toBe(CURRENT_TIME + 999999999 * 1000);
+      const expiryValue = window.localStorage.getItem("__exp_far-future");
+      const expiryData = JSON.parse(expiryValue);
+      expect(expiryData.e).toBe(CURRENT_TIME + 999999999 * 1000);
     });
 
     it("handles non-string values the same as native localStorage", () => {
@@ -328,8 +347,9 @@ describe("Ephemeral Storage", () => {
 
       storage.getItem("test1");
 
-      // Item should be removed from original storage
+      // Both item and expiry should be removed from original storage
       expect(window.localStorage.getItem("test1")).toBe(null);
+      expect(window.localStorage.getItem("__exp_test1")).toBe(null);
     });
 
     it("returns valid items that haven't expired yet", () => {
@@ -382,13 +402,13 @@ describe("Ephemeral Storage", () => {
       const result = storage.getItem("test1");
       expect(result).toBe("value1");
 
-      // Check that it's now wrapped in storage
-      const wrappedValue = window.localStorage.getItem("test1") ?? "";
-      expect(JSON.parse(wrappedValue)).toMatchObject({
-        v: "value1",
-        __vr: "1",
-        ed: CURRENT_TIME + 60000,
-      });
+      // Check that it's now wrapped with separate expiry
+      const value = window.localStorage.getItem("test1");
+      expect(value).toBe("value1");
+
+      const expiryValue = window.localStorage.getItem("__exp_test1");
+      const expiryData = JSON.parse(expiryValue);
+      expect(expiryData.e).toBe(CURRENT_TIME + 60000);
     });
 
     it("handles existing JSON values that are not in our format", () => {
@@ -404,14 +424,14 @@ describe("Ephemeral Storage", () => {
       const result = storage.getItem("user");
       expect(result).toBe(originalJson);
 
-      // But it should be upgraded to our wrapped format in storage
-      const wrappedValue = window.localStorage.getItem("user");
-      const parsed = JSON.parse(wrappedValue ?? "");
-      expect(parsed).toMatchObject({
-        v: originalJson, // The original JSON string should be stored as 'v'
-        __vr: "1",
-        ed: CURRENT_TIME + 60000,
-      });
+      // The value should remain as-is in storage
+      const storedValue = window.localStorage.getItem("user");
+      expect(storedValue).toBe(originalJson);
+
+      // But expiry should be added separately
+      const expiryValue = window.localStorage.getItem("__exp_user");
+      const expiryData = JSON.parse(expiryValue);
+      expect(expiryData.e).toBe(CURRENT_TIME + 60000);
     });
 
     it("handles complex JSON objects as strings", () => {
@@ -444,6 +464,34 @@ describe("Ephemeral Storage", () => {
 
       const result = storage.getItem("malformed");
       expect(result).toBe('{"incomplete": json');
+    });
+
+    it("handles malformed expiry data gracefully", () => {
+      const storage = wrapStorage(window.localStorage);
+
+      // Manually set an item with invalid expiry data
+      window.localStorage.setItem("malformed", "test-value");
+      window.localStorage.setItem("__exp_malformed", "invalid-json");
+
+      // Should clean up invalid expiry and return value
+      const result = storage.getItem("malformed");
+      expect(result).toBe("test-value");
+      expect(window.localStorage.getItem("__exp_malformed")).toBe(null);
+    });
+
+    it("stores expiry metadata with version information", () => {
+      const storage = wrapStorage(window.localStorage, {
+        expiresInSeconds: 60,
+      });
+      storage.setItem("versioned", "test-value");
+
+      const expiryValue = window.localStorage.getItem("__exp_versioned");
+      const expiryData = JSON.parse(expiryValue);
+
+      expect(expiryData).toHaveProperty("e");
+      expect(expiryData).toHaveProperty("v");
+      expect(expiryData.v).toBe("v1");
+      expect(typeof expiryData.e).toBe("number");
     });
   });
 
@@ -553,6 +601,197 @@ describe("Ephemeral Storage", () => {
       // They should be independent
       expect(localWrapper.getItem("session-key")).toBe(null);
       expect(sessionWrapper.getItem("local-key")).toBe(null);
+    });
+  });
+
+  describe("separate expiry storage", () => {
+    it("removes both value and expiry when removeItem is called", () => {
+      const storage = wrapStorage(window.localStorage, {
+        expiresInSeconds: 60,
+      });
+      storage.setItem("test1", "value1");
+
+      // Verify both exist
+      expect(window.localStorage.getItem("test1")).toBe("value1");
+      expect(window.localStorage.getItem("__exp_test1")).toBeTruthy();
+
+      storage.removeItem("test1");
+
+      // Both should be removed
+      expect(window.localStorage.getItem("test1")).toBe(null);
+      expect(window.localStorage.getItem("__exp_test1")).toBe(null);
+    });
+
+    it("handles orphaned expiry keys", () => {
+      const storage = wrapStorage(window.localStorage);
+
+      // Manually create an orphaned expiry key
+      window.localStorage.setItem("__exp_orphan", String(CURRENT_TIME + 60000));
+
+      // getItem should handle this gracefully
+      const result = storage.getItem("orphan");
+      expect(result).toBe(null);
+
+      // The orphaned expiry key should be cleaned up
+      expect(window.localStorage.getItem("__exp_orphan")).toBe(null);
+    });
+
+    it("falls back to immediate cleanup when requestIdleCallback is not available", () => {
+      // Save original and remove requestIdleCallback
+      const originalRequestIdleCallback = globalThis.requestIdleCallback;
+      delete globalThis.requestIdleCallback;
+
+      // Verify requestIdleCallback is actually undefined
+      expect(typeof globalThis.requestIdleCallback).toBe("undefined");
+
+      const storage = wrapStorage(window.localStorage);
+
+      // Manually create an orphaned expiry key
+      window.localStorage.setItem(
+        "__exp_orphan",
+        JSON.stringify({
+          e: CURRENT_TIME + 60000,
+          v: "1",
+        })
+      );
+
+      // Verify the orphaned expiry key exists
+      expect(window.localStorage.getItem("__exp_orphan")).toBeTruthy();
+
+      // Call getItem which should trigger immediate cleanup (fallback behavior)
+      const result = storage.getItem("orphan");
+      expect(result).toBe(null);
+
+      // The orphaned expiry key should be cleaned up immediately (since no requestIdleCallback)
+      expect(window.localStorage.getItem("__exp_orphan")).toBe(null);
+    });
+
+    it("handles values without expiry (external storage)", () => {
+      const storage = wrapStorage(window.localStorage);
+
+      // Store value directly without our wrapper
+      window.localStorage.setItem("external", "external-value");
+
+      const result = storage.getItem("external");
+      expect(result).toBe("external-value");
+    });
+
+    it("cleans up expired items and their expiry keys", () => {
+      const storage = wrapStorage(window.localStorage, {
+        expiresInSeconds: 60,
+      });
+      storage.setItem("will-expire", "value");
+
+      // Move time forward past expiration
+      vi.setSystemTime(new Date(CURRENT_TIME + 61000));
+
+      // Access the expired item
+      const result = storage.getItem("will-expire");
+      expect(result).toBe(null);
+
+      // Both value and expiry should be cleaned up
+      expect(window.localStorage.getItem("will-expire")).toBe(null);
+      expect(window.localStorage.getItem("__exp_will-expire")).toBe(null);
+    });
+
+    it("preserves valid items during expiry cleanup", () => {
+      const storage = wrapStorage(window.localStorage, {
+        expiresInSeconds: 120, // 2 minutes
+      });
+
+      storage.setItem("valid", "valid-value");
+
+      // Create a shorter-lived storage for the expired item
+      const shortStorage = wrapStorage(window.localStorage, {
+        expiresInSeconds: 60, // 1 minute
+      });
+      shortStorage.setItem("expired", "expired-value");
+
+      // Move time forward to expire only the second item
+      vi.setSystemTime(new Date(CURRENT_TIME + 61000));
+
+      // Access expired item to trigger cleanup
+      storage.getItem("expired");
+
+      // Valid item should still exist
+      expect(storage.getItem("valid")).toBe("valid-value");
+      expect(window.localStorage.getItem("valid")).toBe("valid-value");
+      expect(window.localStorage.getItem("__exp_valid")).toBeTruthy();
+    });
+  });
+  it("provides manual cleanup function", () => {
+    const storage = wrapStorage(window.localStorage, {
+      expiresInSeconds: 120, // 2 minutes for valid item
+    });
+
+    // Add a valid item that won't expire
+    storage.setItem("valid", "valid-value");
+
+    // Add an item that will expire
+    const shortStorage = wrapStorage(window.localStorage, {
+      expiresInSeconds: 60, // 1 minute
+    });
+    shortStorage.setItem("will-expire", "expire-value");
+
+    // Manually create an orphaned expiry key
+    window.localStorage.setItem("__exp_orphan", String(CURRENT_TIME + 60000));
+
+    // Move time forward to expire one item
+    vi.setSystemTime(new Date(CURRENT_TIME + 61000));
+
+    // Call cleanup manually
+    storage.cleanup();
+
+    // Expired item and orphaned key should be removed
+    expect(window.localStorage.getItem("will-expire")).toBe(null);
+    expect(window.localStorage.getItem("__exp_will-expire")).toBe(null);
+    expect(window.localStorage.getItem("__exp_orphan")).toBe(null);
+
+    // Valid item should remain (it has 2 minute expiry, only 1 minute passed)
+    expect(window.localStorage.getItem("valid")).toBe("valid-value");
+    expect(window.localStorage.getItem("__exp_valid")).toBeTruthy();
+  });
+
+  describe("Idle Expiry Saving", () => {
+    it("uses requestIdleCallback for saving expiry data", () => {
+      // Reset the mock to track calls
+      const requestIdleCallbackSpy = vi.fn((callback) => {
+        callback(); // Execute immediately for testing
+      });
+      globalThis.requestIdleCallback = requestIdleCallbackSpy;
+
+      const storage = wrapStorage(window.localStorage, {
+        expiresInSeconds: 60,
+      });
+
+      storage.setItem("test-idle", "value");
+
+      // Verify requestIdleCallback was called
+      expect(requestIdleCallbackSpy).toHaveBeenCalledTimes(1);
+      expect(requestIdleCallbackSpy).toHaveBeenCalledWith(expect.any(Function));
+
+      // Expiry data should be saved
+      const expiryValue = window.localStorage.getItem("__exp_test-idle");
+      expect(expiryValue).toBeTruthy();
+    });
+
+    it("falls back to immediate saving when requestIdleCallback is not available", () => {
+      // Remove requestIdleCallback
+      const originalRequestIdleCallback = globalThis.requestIdleCallback;
+      delete globalThis.requestIdleCallback;
+
+      const storage = wrapStorage(window.localStorage, {
+        expiresInSeconds: 60,
+      });
+
+      storage.setItem("test-no-idle", "value");
+
+      // Expiry data should be saved immediately as fallback
+      const expiryValue = window.localStorage.getItem("__exp_test-no-idle");
+      expect(expiryValue).toBeTruthy();
+
+      // Restore original
+      globalThis.requestIdleCallback = originalRequestIdleCallback;
     });
   });
 });
