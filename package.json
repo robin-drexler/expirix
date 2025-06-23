@@ -1,6 +1,6 @@
 {
   "name": "expirix",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "A storage wrapper that adds expiration functionality to localStorage and sessionStorage",
   "main": "dist/index.cjs",
   "module": "dist/index.esm.js",
@@ -12,6 +12,7 @@
       "require": "./dist/index.cjs"
     }
   },
+  "sideEffects": false,
   "files": [
     "dist"
   ],
